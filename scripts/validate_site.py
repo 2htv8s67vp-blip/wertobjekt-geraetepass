@@ -12,14 +12,14 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 MANUAL = ROOT / "assets" / "trotec-ttk-165-eco-betriebsanleitung-de.pdf"
 EXPECTED_MANUAL_SHA256 = "e35f81105e080731d623b8b29bf4654251f41c3455819fd86d63cf6440cc915e"
+BASE_PATH = "/wertobjekt-geraetepass/"
 FORBIDDEN = (
     "192.168.",
     "/srv/wertobjekt",
-    "erlenweg 17",
-    "stefan.win@",
     "iban",
     "steuerkennung",
 )
+LEGAL_PAGES = {"impressum/index.html", "datenschutz/index.html"}
 
 
 class LinkCollector(HTMLParser):
@@ -38,7 +38,14 @@ def resolve_local(html_file: Path, link: str) -> Path | None:
     parsed = urlsplit(link)
     if parsed.scheme or parsed.netloc or link.startswith(("#", "mailto:", "tel:")):
         return None
-    target = (html_file.parent / parsed.path).resolve()
+    if parsed.path.startswith(BASE_PATH):
+        target = (ROOT / parsed.path.removeprefix(BASE_PATH)).resolve()
+    elif parsed.path.startswith("/"):
+        raise ValueError(f"Link außerhalb des GitHub-Pages-Basispfads: {link}")
+    else:
+        target = (html_file.parent / parsed.path).resolve()
+    if not target.is_relative_to(ROOT):
+        raise ValueError(f"Link außerhalb des Website-Verzeichnisses: {link}")
     if target.is_dir() or parsed.path.endswith("/"):
         target /= "index.html"
     return target
@@ -52,9 +59,17 @@ if not html_files:
 for html_file in html_files:
     text = html_file.read_text(encoding="utf-8")
     lower = text.lower()
+    relative = html_file.relative_to(ROOT).as_posix()
     for forbidden in FORBIDDEN:
         if forbidden in lower:
             errors.append(f"Verbotener interner Inhalt in {html_file.relative_to(ROOT)}: {forbidden}")
+    # Only the owner's explicitly approved public contact details belong in legal pages.
+    if relative not in LEGAL_PAGES and ("mailto:" in lower or "<address" in lower):
+        errors.append(f"Kontaktdaten außerhalb der Rechtstexte: {relative}")
+    if any(token in lower for token in ("<script", "<iframe", "<form", "onload=", "onclick=")):
+        errors.append(f"Nicht-statischer Inhalt: {relative}")
+    if '<footer>' not in lower or f'href="{BASE_PATH}impressum/"' not in text or f'href="{BASE_PATH}datenschutz/"' not in text:
+        errors.append(f"Rechtliche Navigation fehlt: {relative}")
     parser = LinkCollector()
     parser.feed(text)
     for link in parser.links:
@@ -116,4 +131,9 @@ if errors:
     raise SystemExit("\n".join(errors))
 
 print("OK: Startseite, Modellseite, CSS und Hersteller-PDF über lokalen HTTP-Server erreichbar.")
-print("OK: Ohne bestätigte Geschäftsnummer ist kein WhatsApp-Kontakt sichtbar.")
+print("OK: Ohne bestätigte WhatsApp-Nummer ist kein WhatsApp-Kontakt sichtbar.")
+
+electrical = "Unsere Mietgeräte werden entsprechend den geltenden Vorschriften und festgelegten Prüffristen auf ihre elektrische Sicherheit geprüft. Die Prüfungen werden für jedes Gerät einzeln dokumentiert."
+if electrical not in model_page.read_text(encoding="utf-8"):
+    raise SystemExit("Allgemeiner Hinweis zur elektrischen Sicherheit fehlt.")
+print("OK: Rechtliche Navigation und allgemeiner Hinweis zur elektrischen Sicherheit vorhanden.")
