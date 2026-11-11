@@ -77,11 +77,20 @@ for html_file in html_files:
         if target is not None and not target.exists():
             errors.append(f"Defekter Link in {html_file.relative_to(ROOT)}: {link}")
 
-model_page = ROOT / "models" / "m0001" / "index.html"
-if not model_page.exists():
-    errors.append("Stabile Modellseite models/m0001/ fehlt.")
-elif "whatsapp" in model_page.read_text(encoding="utf-8").lower():
-    errors.append("Unbestätigter WhatsApp-Kontakt ist auf der Modellseite sichtbar.")
+model_codes = ("m0001", "m0002", "m0003", "m0004", "m0006", "m0007", "m0008")
+index_text = (ROOT / "index.html").read_text(encoding="utf-8").lower()
+for model_code in model_codes:
+    model_page = ROOT / "models" / model_code / "index.html"
+    if not model_page.exists():
+        errors.append(f"Stabile Modellseite models/{model_code}/ fehlt.")
+        continue
+    page_text = model_page.read_text(encoding="utf-8").lower()
+    if "whatsapp" in page_text:
+        errors.append(f"Unbestätigter WhatsApp-Kontakt ist auf {model_code} sichtbar.")
+    if f'href="models/{model_code}/"' not in index_text:
+        errors.append(f"Modellseite {model_code} fehlt auf der Ersatz-Geräteliste.")
+    if f"modellkennung {model_code}" not in page_text:
+        errors.append(f"Lesbare Modellkennung fehlt auf {model_code}.")
 
 if not MANUAL.exists():
     errors.append("Hersteller-PDF fehlt.")
@@ -108,12 +117,12 @@ server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
 thread = threading.Thread(target=server.serve_forever, daemon=True)
 thread.start()
 try:
-    for request_path, expected_type in (
+    requests = [
         ("/", "text/html"),
-        ("/models/m0001/", "text/html"),
         ("/assets/styles.css", "text/css"),
         ("/assets/trotec-ttk-165-eco-betriebsanleitung-de.pdf", "application/pdf"),
-    ):
+    ] + [(f"/models/{model_code}/", "text/html") for model_code in model_codes]
+    for request_path, expected_type in requests:
         with urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}{request_path}") as response:
             payload = response.read()
             if response.status != 200:
@@ -130,10 +139,10 @@ finally:
 if errors:
     raise SystemExit("\n".join(errors))
 
-print("OK: Startseite, Modellseite, CSS und Hersteller-PDF über lokalen HTTP-Server erreichbar.")
+print("OK: Startseite, 7 freigegebene Modellseiten, CSS und M0001-Hersteller-PDF über lokalen HTTP-Server erreichbar.")
 print("OK: Ohne bestätigte WhatsApp-Nummer ist kein WhatsApp-Kontakt sichtbar.")
 
 electrical = "Unsere Mietgeräte werden entsprechend den geltenden Vorschriften und festgelegten Prüffristen auf ihre elektrische Sicherheit geprüft. Die Prüfungen werden für jedes Gerät einzeln dokumentiert."
-if electrical not in model_page.read_text(encoding="utf-8"):
+if electrical not in (ROOT / "models" / "m0001" / "index.html").read_text(encoding="utf-8"):
     raise SystemExit("Allgemeiner Hinweis zur elektrischen Sicherheit fehlt.")
 print("OK: Rechtliche Navigation und allgemeiner Hinweis zur elektrischen Sicherheit vorhanden.")
