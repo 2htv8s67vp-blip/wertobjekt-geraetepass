@@ -18,6 +18,12 @@ FORBIDDEN = (
     "/srv/wertobjekt",
     "iban",
     "steuerkennung",
+    "wert_device_qr_secret",
+    "#wo1=",
+    "ns001",
+    "bt003",
+    "019522 90170",
+    "20011007",
 )
 LEGAL_PAGES = {"impressum/index.html", "datenschutz/index.html"}
 
@@ -77,7 +83,7 @@ for html_file in html_files:
         if target is not None and not target.exists():
             errors.append(f"Defekter Link in {html_file.relative_to(ROOT)}: {link}")
 
-model_codes = ("m0001", "m0002", "m0003", "m0004", "m0006", "m0007", "m0008")
+model_codes = ("m0001", "m0002", "m0003", "m0004", "m0005", "m0006", "m0007", "m0008", "m0009")
 index_text = (ROOT / "index.html").read_text(encoding="utf-8").lower()
 for model_code in model_codes:
     model_page = ROOT / "models" / model_code / "index.html"
@@ -92,6 +98,16 @@ for model_code in model_codes:
     if f"modellkennung {model_code}" not in page_text:
         errors.append(f"Lesbare Modellkennung fehlt auf {model_code}.")
 
+required_public_facts = {
+    "m0005": ("nt 30/1 ap l", "1.148-221.0", "staubklasse l", "bta-5758316-000-01.pdf"),
+    "m0009": ("pb-08", "r290 / 60 g", "mindestens 4 m²", "pb-08_quick_start_guide"),
+}
+for model_code, required_facts in required_public_facts.items():
+    page_text = (ROOT / "models" / model_code / "index.html").read_text(encoding="utf-8").lower()
+    for required_fact in required_facts:
+        if required_fact not in page_text:
+            errors.append(f"Freigaberelevante Modellinformation fehlt auf {model_code}: {required_fact}")
+
 if not MANUAL.exists():
     errors.append("Hersteller-PDF fehlt.")
 else:
@@ -104,7 +120,7 @@ if errors:
 
 print(f"OK: {len(html_files)} HTML-Dateien, alle lokalen Links gültig.")
 print(f"OK: Hersteller-PDF SHA-256 {EXPECTED_MANUAL_SHA256}.")
-print("OK: Keine internen Server-, Adress-, Steuer- oder Bankangaben gefunden.")
+print("OK: Keine internen Server-, Geräte-, QR-, Adress-, Steuer- oder Bankangaben gefunden.")
 
 
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
@@ -139,7 +155,7 @@ finally:
 if errors:
     raise SystemExit("\n".join(errors))
 
-print("OK: Startseite, 7 freigegebene Modellseiten, CSS und M0001-Hersteller-PDF über lokalen HTTP-Server erreichbar.")
+print("OK: Startseite, 9 freigegebene Modellseiten, CSS und M0001-Hersteller-PDF über lokalen HTTP-Server erreichbar.")
 print("OK: Ohne bestätigte WhatsApp-Nummer ist kein WhatsApp-Kontakt sichtbar.")
 
 electrical = "Unsere Mietgeräte werden entsprechend den geltenden Vorschriften und festgelegten Prüffristen auf ihre elektrische Sicherheit geprüft. Die Prüfungen werden für jedes Gerät einzeln dokumentiert."
